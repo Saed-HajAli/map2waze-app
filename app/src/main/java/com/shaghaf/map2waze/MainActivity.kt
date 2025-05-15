@@ -20,11 +20,6 @@ import org.json.JSONObject
 import java.net.URL
 
 class MainActivity : ComponentActivity() {
-    companion object {
-        private const val TEST_MODE = true
-        private const val TEST_URL = "https://maps.app.goo.gl/he2tcSbZv1V8otFc9"
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -33,7 +28,7 @@ class MainActivity : ComponentActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     MainScreen(
                         modifier = Modifier.padding(innerPadding),
-                        sharedText = if (TEST_MODE) TEST_URL else intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+                        sharedText = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
                     )
                 }
             }
@@ -48,20 +43,29 @@ fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
     var wazeUrl by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    
+    // Test mode variables
+    val isTestMode = remember { true }
+    val testUrl = remember { "https://maps.app.goo.gl/he2tcSbZv1V8otFc9" }
+    
+    // Use test URL if in test mode, otherwise use shared text
+    val urlToProcess = remember(sharedText, isTestMode, testUrl) {
+        if (isTestMode) testUrl else sharedText
+    }
 
-    LaunchedEffect(sharedText) {
-        if (sharedText.isNotEmpty()) {
+    LaunchedEffect(urlToProcess) {
+        if (urlToProcess.isNotEmpty()) {
             isLoading = true
             errorMessage = null
             scope.launch {
                 try {
-                    val encodedUrl = Uri.encode(sharedText)
+                    val encodedUrl = Uri.encode(urlToProcess)
                     val apiUrl = "https://faas-fra1-afec6ce7.doserverless.co/api/v1/web/fn-b547621a-40ef-4dbd-8b08-aa9b8bd6c273/default/map2waze?url=$encodedUrl"
                     val response = URL(apiUrl).readText()
                     val jsonResponse = JSONObject(response)
                     wazeUrl = jsonResponse.getString("waze_app_url")
                     
-                    if (TEST_MODE) {
+                    if (isTestMode) {
                         // In test mode, just show the Waze URL
                         isLoading = false
                     } else {
@@ -93,12 +97,12 @@ fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
                 color = MaterialTheme.colorScheme.error,
                 textAlign = TextAlign.Center
             )
-        } else if (TEST_MODE && wazeUrl != null) {
+        } else if (isTestMode && wazeUrl != null) {
             Text(
                 text = "Waze URL: $wazeUrl",
                 textAlign = TextAlign.Center
             )
-        } else if (sharedText.isEmpty()) {
+        } else if (urlToProcess.isEmpty()) {
             Text(
                 text = "Share a Google Maps link to convert it to Waze",
                 textAlign = TextAlign.Center
