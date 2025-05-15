@@ -20,6 +20,11 @@ import org.json.JSONObject
 import java.net.URL
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        private const val TEST_MODE = true
+        private const val TEST_URL = "https://maps.app.goo.gl/he2tcSbZv1V8otFc9"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -28,7 +33,7 @@ class MainActivity : ComponentActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     MainScreen(
                         modifier = Modifier.padding(innerPadding),
-                        sharedText = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+                        sharedText = if (TEST_MODE) TEST_URL else intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
                     )
                 }
             }
@@ -56,9 +61,14 @@ fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
                     val jsonResponse = JSONObject(response)
                     wazeUrl = jsonResponse.getString("waze_app_url")
                     
-                    // Open Waze app
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeUrl))
-                    context.startActivity(intent)
+                    if (TEST_MODE) {
+                        // In test mode, just show the Waze URL
+                        isLoading = false
+                    } else {
+                        // In normal mode, open Waze app
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeUrl))
+                        context.startActivity(intent)
+                    }
                 } catch (e: Exception) {
                     errorMessage = e.message ?: "An error occurred"
                 } finally {
@@ -81,6 +91,11 @@ fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
             Text(
                 text = errorMessage!!,
                 color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center
+            )
+        } else if (TEST_MODE && wazeUrl != null) {
+            Text(
+                text = "Waze URL: $wazeUrl",
                 textAlign = TextAlign.Center
             )
         } else if (sharedText.isEmpty()) {
