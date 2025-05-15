@@ -3,6 +3,7 @@ package com.shaghaf.map2waze
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -18,6 +19,7 @@ import com.shaghaf.map2waze.ui.theme.Map2WazeTheme
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.net.URL
+import java.net.HttpURLConnection
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,20 +63,40 @@ fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
                 try {
                     val encodedUrl = Uri.encode(urlToProcess)
                     val apiUrl = "https://faas-fra1-afec6ce7.doserverless.co/api/v1/web/fn-b547621a-40ef-4dbd-8b08-aa9b8bd6c273/default/map2waze?url=$encodedUrl"
-                    val response = URL(apiUrl).readText()
-                    val jsonResponse = JSONObject(response)
-                    wazeUrl = jsonResponse.getString("waze_app_url")
                     
-                    if (isTestMode) {
-                        // In test mode, just show the Waze URL
-                        isLoading = false
+                    Log.d("Map2Waze", "Processing URL: $apiUrl")
+                    
+                    val connection = URL(apiUrl).openConnection() as HttpURLConnection
+                    connection.requestMethod = "GET"
+                    connection.connectTimeout = 15000
+                    connection.readTimeout = 15000
+                    
+                    val responseCode = connection.responseCode
+                    Log.d("Map2Waze", "Response Code: $responseCode")
+                    
+                    if (responseCode == HttpURLConnection.HTTP_OK) {
+                        val response = connection.inputStream.bufferedReader().use { it.readText() }
+                        Log.d("Map2Waze", "Response: $response")
+                        
+                        val jsonResponse = JSONObject(response)
+                        wazeUrl = jsonResponse.getString("waze_app_url")
+                        
+                        if (isTestMode) {
+                            // In test mode, just show the Waze URL
+                            isLoading = false
+                        } else {
+                            // In normal mode, open Waze app
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeUrl))
+                            context.startActivity(intent)
+                        }
                     } else {
-                        // In normal mode, open Waze app
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeUrl))
-                        context.startActivity(intent)
+                        val errorResponse = connection.errorStream?.bufferedReader()?.use { it.readText() }
+                        Log.e("Map2Waze", "Error Response: $errorResponse")
+                        throw Exception("Server returned error code: $responseCode")
                     }
                 } catch (e: Exception) {
-                    errorMessage = e.message ?: "An error occurred"
+                    Log.e("Map2Waze", "Error occurred", e)
+                    errorMessage = "Error: ${e.message}\nPlease try again later."
                 } finally {
                     isLoading = false
                 }
