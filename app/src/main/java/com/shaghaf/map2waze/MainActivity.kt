@@ -189,97 +189,47 @@ fun MainScreen(
             errorMessage = null
             scope.launch {
                 try {
-                    val response: String
+                    val response: MapResponse
                     if (isTestMode) {
                         addDebugLog("Using mock response in test mode")
-                        response = mockResponse
+                        response = MapResponse(
+                            formatted_address = "8CV6+QRC - Al Ghubaiba - Halwan - Sharjah - United Arab Emirates",
+                            google_maps_url = "https://www.google.com/maps?q=25.344607,55.411712",
+                            latitude = 25.344607,
+                            longitude = 55.411712,
+                            waze_app_url = "waze://?ll=25.344607,55.411712&navigate=yes",
+                            waze_web_url = "https://waze.com/ul?ll=25.344607,55.411712&navigate=yes"
+                        )
                     } else {
-                        val encodedUrl = Uri.encode(urlToProcess)
+                        val encodedUrl = java.net.URLEncoder.encode(urlToProcess, "UTF-8")
                         val apiUrl = "https://faas-fra1-afec6ce7.doserverless.co/api/v1/web/fn-b547621a-40ef-4dbd-8b08-aa9b8bd6c273/default/map2waze?url=$encodedUrl"
-                        
-                        addDebugLog("Making API call to: $apiUrl")
-                        var connection = URL(apiUrl).openConnection() as HttpURLConnection
+                        addDebugLog("Making API call to: $apiUrl (URL.readText)")
                         try {
-                            addDebugLog("Creating URL connection...")
-                            //var connection = URL(apiUrl).openConnection() as HttpURLConnection
-                            connection.requestMethod = "GET"
-                            connection.connectTimeout = 15000
-                            connection.readTimeout = 15000
-                            connection.setRequestProperty("Accept", "application/json")
-                            
-                            addDebugLog("Connecting to API...")
-                            try {
-                                connection.connect()
-                                addDebugLog("Connection successful")
-                            } catch (e: Exception) {
-                                addDebugLog("Connection failed: ${e.message}")
-                                throw Exception("Failed to connect to API: ${e.message}")
-                            }
-                            
-                            val responseCode = connection.responseCode
-                            addDebugLog("API Response Code: $responseCode")
-                            
-                            if (responseCode == HttpURLConnection.HTTP_OK) {
-                                addDebugLog("Reading response...")
-                                try {
-                                    response = connection.inputStream.bufferedReader().use { it.readText() }
-                                    addDebugLog("API Response: $response")
-                                    
-                                    if (response.isBlank()) {
-                                        throw Exception("Empty response from API")
-                                    }
-                                } catch (e: Exception) {
-                                    addDebugLog("Error reading response: ${e.message}")
-                                    throw Exception("Error reading API response: ${e.message}")
-                                }
-                            } else {
-                                addDebugLog("Reading error response...")
-                                val errorResponse = try {
-                                    connection.errorStream?.bufferedReader()?.use { it.readText() }
-                                } catch (e: Exception) {
-                                    addDebugLog("Error reading error response: ${e.message}")
-                                    null
-                                }
-                                addDebugLog("API Error Response: $errorResponse")
-                                throw Exception("Server returned error code: $responseCode${if (errorResponse != null) " - $errorResponse" else ""}")
-                            }
+                            val body = URL(apiUrl).readText()
+                            addDebugLog("API Response: $body")
+                            val json = org.json.JSONObject(body)
+                            response = MapResponse(
+                                formatted_address = json.optString("formatted_address"),
+                                google_maps_url = json.optString("google_maps_url"),
+                                latitude = json.optDouble("latitude"),
+                                longitude = json.optDouble("longitude"),
+                                waze_app_url = json.optString("waze_app_url"),
+                                waze_web_url = json.optString("waze_web_url")
+                            )
                         } catch (e: Exception) {
-                            addDebugLog("Network error details: ${e.javaClass.simpleName} - ${e.message}")
-                            e.printStackTrace()
-                            throw Exception("Network error: ${e.message}")
-                        } finally {
-                            try {
-                                connection.disconnect()
-                                addDebugLog("Connection closed")
-                            } catch (e: Exception) {
-                                addDebugLog("Error closing connection: ${e.message}")
-                            }
+                            addDebugLog("API call failed: ${e.message}")
+                            throw Exception("Failed to convert URL: ${e.message}")
                         }
                     }
 
-                    try {
-                        val jsonResponse = JSONObject(response)
-                        if (!jsonResponse.has("waze_app_url") || !jsonResponse.has("waze_web_url")) {
-                            addDebugLog("Invalid API response format: $response")
-                            throw Exception("Invalid response format from API")
-                        }
-                        
-                        wazeUrl = jsonResponse.getString("waze_app_url")
-                        wazeWebUrl = jsonResponse.getString("waze_web_url")
-                        
-                        addDebugLog("Parsed Waze URLs - App: $wazeUrl, Web: $wazeWebUrl")
-                        
-                        if (wazeUrl.isNullOrBlank() || wazeWebUrl.isNullOrBlank()) {
-                            throw Exception("Invalid Waze URLs in response")
-                        }
-                        
-                        if (autoOpenWaze) {
-                            addDebugLog("Auto-opening Waze app")
-                            openWaze(wazeUrl!!)
-                        }
-                    } catch (e: Exception) {
-                        addDebugLog("Error parsing API response: ${e.message}")
-                        throw Exception("Error parsing API response: ${e.message}")
+                    wazeUrl = response.waze_app_url
+                    wazeWebUrl = response.waze_web_url
+                    
+                    addDebugLog("Parsed Waze URLs - App: $wazeUrl, Web: $wazeWebUrl")
+                    
+                    if (autoOpenWaze) {
+                        addDebugLog("Auto-opening Waze app")
+                        openWaze(wazeUrl!!)
                     }
                 } catch (e: Exception) {
                     addDebugLog("Error processing URL: ${e.message}")
