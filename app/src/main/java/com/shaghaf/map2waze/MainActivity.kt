@@ -25,14 +25,33 @@ import com.shaghaf.map2waze.MainActivity.Companion.addDebugLog
 import com.shaghaf.map2waze.ui.theme.Map2WazeTheme
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import java.net.URL
-import java.net.HttpURLConnection
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.GET
+import retrofit2.http.Query
 import java.text.SimpleDateFormat
 import java.util.*
+
+// API Response data class
+data class MapResponse(
+    val formatted_address: String,
+    val google_maps_url: String,
+    val latitude: Double,
+    val longitude: Double,
+    val waze_app_url: String,
+    val waze_web_url: String
+)
+
+// Retrofit API Interface
+interface MapApiService {
+    @GET("map2waze")
+    suspend fun convertMapUrl(@Query("url") url: String): MapResponse
+}
 
 class MainActivity : ComponentActivity() {
     private lateinit var prefs: SharedPreferences
     private val debugLogs = mutableStateListOf<String>()
+    private lateinit var mapApiService: MapApiService
 
     companion object {
         private var instance: MainActivity? = null
@@ -43,7 +62,7 @@ class MainActivity : ComponentActivity() {
                 val logMessage = "[$timestamp] $message"
                 Log.d("Map2Waze", message)
                 activity.debugLogs.add(logMessage)
-                if (activity.debugLogs.size > 100) { // Keep only last 100 logs
+                if (activity.debugLogs.size > 100) {
                     activity.debugLogs.removeAt(0)
                 }
             }
@@ -55,8 +74,15 @@ class MainActivity : ComponentActivity() {
         instance = this
         prefs = getSharedPreferences("Map2WazePrefs", MODE_PRIVATE)
         enableEdgeToEdge()
+
+        // Initialize Retrofit
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://faas-fra1-afec6ce7.doserverless.co/api/v1/web/fn-b547621a-40ef-4dbd-8b08-aa9b8bd6c273/default/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+
+        mapApiService = retrofit.create(MapApiService::class.java)
         
-        // Get shared text directly from EXTRA_TEXT
         val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
         addDebugLog("Received shared text: $sharedText")
         
@@ -67,7 +93,8 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding),
                         sharedText = sharedText,
                         prefs = prefs,
-                        debugLogs = debugLogs
+                        debugLogs = debugLogs,
+                        mapApiService = mapApiService
                     )
                 }
             }
@@ -96,7 +123,8 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding),
                         sharedText = sharedText,
                         prefs = prefs,
-                        debugLogs = debugLogs
+                        debugLogs = debugLogs,
+                        mapApiService = mapApiService
                     )
                 }
             }
@@ -121,7 +149,8 @@ fun MainScreen(
     modifier: Modifier = Modifier,
     sharedText: String,
     prefs: SharedPreferences,
-    debugLogs: List<String>
+    debugLogs: List<String>,
+    mapApiService: MapApiService
 ) {
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -189,97 +218,36 @@ fun MainScreen(
             errorMessage = null
             scope.launch {
                 try {
-                    val response: String
+                    val response: MapResponse
                     if (isTestMode) {
                         addDebugLog("Using mock response in test mode")
-                        response = mockResponse
+                        response = MapResponse(
+                            formatted_address = "8CV6+QRC - Al Ghubaiba - Halwan - Sharjah - United Arab Emirates",
+                            google_maps_url = "https://www.google.com/maps?q=25.344607,55.411712",
+                            latitude = 25.344607,
+                            longitude = 55.411712,
+                            waze_app_url = "waze://?ll=25.344607,55.411712&navigate=yes",
+                            waze_web_url = "https://waze.com/ul?ll=25.344607,55.411712&navigate=yes"
+                        )
                     } else {
-                        val encodedUrl = Uri.encode(urlToProcess)
-                        val apiUrl = "https://faas-fra1-afec6ce7.doserverless.co/api/v1/web/fn-b547621a-40ef-4dbd-8b08-aa9b8bd6c273/default/map2waze?url=$encodedUrl"
-                        
-                        addDebugLog("Making API call to: $apiUrl")
-                        var connection = URL(apiUrl).openConnection() as HttpURLConnection
+                        addDebugLog("Making API call to convert URL: $urlToProcess")
                         try {
-                            addDebugLog("Creating URL connection...")
-                            //var connection = URL(apiUrl).openConnection() as HttpURLConnection
-                            connection.requestMethod = "GET"
-                            connection.connectTimeout = 15000
-                            connection.readTimeout = 15000
-                            connection.setRequestProperty("Accept", "application/json")
-                            
-                            addDebugLog("Connecting to API...")
-                            try {
-                                connection.connect()
-                                addDebugLog("Connection successful")
-                            } catch (e: Exception) {
-                                addDebugLog("Connection failed: ${e.message}")
-                                throw Exception("Failed to connect to API: ${e.message}")
-                            }
-                            
-                            val responseCode = connection.responseCode
-                            addDebugLog("API Response Code: $responseCode")
-                            
-                            if (responseCode == HttpURLConnection.HTTP_OK) {
-                                addDebugLog("Reading response...")
-                                try {
-                                    response = connection.inputStream.bufferedReader().use { it.readText() }
-                                    addDebugLog("API Response: $response")
-                                    
-                                    if (response.isBlank()) {
-                                        throw Exception("Empty response from API")
-                                    }
-                                } catch (e: Exception) {
-                                    addDebugLog("Error reading response: ${e.message}")
-                                    throw Exception("Error reading API response: ${e.message}")
-                                }
-                            } else {
-                                addDebugLog("Reading error response...")
-                                val errorResponse = try {
-                                    connection.errorStream?.bufferedReader()?.use { it.readText() }
-                                } catch (e: Exception) {
-                                    addDebugLog("Error reading error response: ${e.message}")
-                                    null
-                                }
-                                addDebugLog("API Error Response: $errorResponse")
-                                throw Exception("Server returned error code: $responseCode${if (errorResponse != null) " - $errorResponse" else ""}")
-                            }
+                            response = mapApiService.convertMapUrl(urlToProcess)
+                            addDebugLog("API Response received: $response")
                         } catch (e: Exception) {
-                            addDebugLog("Network error details: ${e.javaClass.simpleName} - ${e.message}")
-                            e.printStackTrace()
-                            throw Exception("Network error: ${e.message}")
-                        } finally {
-                            try {
-                                connection.disconnect()
-                                addDebugLog("Connection closed")
-                            } catch (e: Exception) {
-                                addDebugLog("Error closing connection: ${e.message}")
-                            }
+                            addDebugLog("API call failed: ${e.message}")
+                            throw Exception("Failed to convert URL: ${e.message}")
                         }
                     }
 
-                    try {
-                        val jsonResponse = JSONObject(response)
-                        if (!jsonResponse.has("waze_app_url") || !jsonResponse.has("waze_web_url")) {
-                            addDebugLog("Invalid API response format: $response")
-                            throw Exception("Invalid response format from API")
-                        }
-                        
-                        wazeUrl = jsonResponse.getString("waze_app_url")
-                        wazeWebUrl = jsonResponse.getString("waze_web_url")
-                        
-                        addDebugLog("Parsed Waze URLs - App: $wazeUrl, Web: $wazeWebUrl")
-                        
-                        if (wazeUrl.isNullOrBlank() || wazeWebUrl.isNullOrBlank()) {
-                            throw Exception("Invalid Waze URLs in response")
-                        }
-                        
-                        if (autoOpenWaze) {
-                            addDebugLog("Auto-opening Waze app")
-                            openWaze(wazeUrl!!)
-                        }
-                    } catch (e: Exception) {
-                        addDebugLog("Error parsing API response: ${e.message}")
-                        throw Exception("Error parsing API response: ${e.message}")
+                    wazeUrl = response.waze_app_url
+                    wazeWebUrl = response.waze_web_url
+                    
+                    addDebugLog("Parsed Waze URLs - App: $wazeUrl, Web: $wazeWebUrl")
+                    
+                    if (autoOpenWaze) {
+                        addDebugLog("Auto-opening Waze app")
+                        openWaze(wazeUrl!!)
                     }
                 } catch (e: Exception) {
                     addDebugLog("Error processing URL: ${e.message}")
