@@ -29,6 +29,7 @@ import java.net.URL
 import java.net.HttpURLConnection
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.foundation.text.selection.SelectionContainer
 
 // Data class for API response
 data class MapResponse(
@@ -397,13 +398,11 @@ fun MainScreen(
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
-                    
-                    debugLogs.forEach { log ->
+                    SelectionContainer {
                         Text(
-                            text = log,
+                            text = debugLogs.joinToString("\n"),
                             style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            modifier = Modifier.padding(vertical = 2.dp)
+                            fontFamily = FontFamily.Monospace
                         )
                     }
                 }
