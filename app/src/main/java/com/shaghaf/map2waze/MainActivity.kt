@@ -1,6 +1,7 @@
 package com.shaghaf.map2waze
 
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -22,15 +23,19 @@ import java.net.URL
 import java.net.HttpURLConnection
 
 class MainActivity : ComponentActivity() {
+    private lateinit var prefs: SharedPreferences
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        prefs = getSharedPreferences("Map2WazePrefs", MODE_PRIVATE)
         enableEdgeToEdge()
         setContent {
             Map2WazeTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     MainScreen(
                         modifier = Modifier.padding(innerPadding),
-                        sharedText = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+                        sharedText = intent.getStringExtra(Intent.EXTRA_TEXT) ?: "",
+                        prefs = prefs
                     )
                 }
             }
@@ -51,7 +56,11 @@ private val mockResponse = """
 """.trimIndent()
 
 @Composable
-fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
+fun MainScreen(
+    modifier: Modifier = Modifier,
+    sharedText: String,
+    prefs: SharedPreferences
+) {
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var wazeUrl by remember { mutableStateOf<String?>(null) }
@@ -59,15 +68,24 @@ fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
     val scope = rememberCoroutineScope()
     
     // Test mode variables
-    val isTestMode = remember { true }
+    var isTestMode by remember { mutableStateOf(prefs.getBoolean("isTestMode", false)) }
     val testUrl = remember { "https://maps.app.goo.gl/fZFbPgdBDYpkcwVSA" }
     
     // Auto-open setting
-    var autoOpenWaze by remember { mutableStateOf(true) }
+    var autoOpenWaze by remember { mutableStateOf(prefs.getBoolean("autoOpenWaze", true)) }
     
     // Use test URL if in test mode, otherwise use shared text
     val urlToProcess = remember(sharedText, isTestMode, testUrl) {
         if (isTestMode) testUrl else sharedText
+    }
+
+    // Save settings when they change
+    LaunchedEffect(isTestMode, autoOpenWaze) {
+        prefs.edit().apply {
+            putBoolean("isTestMode", isTestMode)
+            putBoolean("autoOpenWaze", autoOpenWaze)
+            apply()
+        }
     }
 
     LaunchedEffect(urlToProcess) {
@@ -133,21 +151,40 @@ fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
         verticalArrangement = Arrangement.Center
     ) {
         // Settings section
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = "Auto-open Waze:",
-                modifier = Modifier.padding(end = 8.dp)
-            )
-            Switch(
-                checked = autoOpenWaze,
-                onCheckedChange = { autoOpenWaze = it }
-            )
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Test Mode:",
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                Switch(
+                    checked = isTestMode,
+                    onCheckedChange = { isTestMode = it }
+                )
+            }
+            
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Auto-open Waze:",
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                Switch(
+                    checked = autoOpenWaze,
+                    onCheckedChange = { autoOpenWaze = it }
+                )
+            }
         }
 
         if (isLoading) {
