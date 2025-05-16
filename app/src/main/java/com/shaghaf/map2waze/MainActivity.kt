@@ -198,10 +198,10 @@ fun MainScreen(
                         val apiUrl = "https://faas-fra1-afec6ce7.doserverless.co/api/v1/web/fn-b547621a-40ef-4dbd-8b08-aa9b8bd6c273/default/map2waze?url=$encodedUrl"
                         
                         addDebugLog("Making API call to: $apiUrl")
-                        
+                        var connection = URL(apiUrl).openConnection() as HttpURLConnection
                         try {
                             addDebugLog("Creating URL connection...")
-                            val connection = URL(apiUrl).openConnection() as HttpURLConnection
+                            //var connection = URL(apiUrl).openConnection() as HttpURLConnection
                             connection.requestMethod = "GET"
                             connection.connectTimeout = 15000
                             connection.readTimeout = 15000
