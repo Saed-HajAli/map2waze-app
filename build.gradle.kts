@@ -4,3 +4,9 @@ plugins {
     alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.compose) apply false
 }
+
+buildscript {
+    ext {
+        compose_compiler_version = "1.5.8"
+    }
+}
