@@ -24,18 +24,10 @@ import androidx.compose.ui.unit.dp
 import com.shaghaf.map2waze.MainActivity.Companion.addDebugLog
 import com.shaghaf.map2waze.ui.theme.Map2WazeTheme
 import kotlinx.coroutines.launch
-import io.ktor.client.*
-import io.ktor.client.engine.okhttp.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.serialization.kotlinx.json.*
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
+import java.net.HttpURLConnection
+import java.net.URL
+import org.json.JSONObject
 
-@Serializable
-// API Response data class
-// (now using kotlinx.serialization)
 data class MapResponse(
     val formatted_address: String,
     val google_maps_url: String,
@@ -48,7 +40,6 @@ data class MapResponse(
 class MainActivity : ComponentActivity() {
     private lateinit var prefs: SharedPreferences
     private val debugLogs = mutableStateListOf<String>()
-    private lateinit var mapApiService: MapApiService
 
     companion object {
         private var instance: MainActivity? = null
@@ -72,14 +63,6 @@ class MainActivity : ComponentActivity() {
         prefs = getSharedPreferences("Map2WazePrefs", MODE_PRIVATE)
         enableEdgeToEdge()
 
-        // Initialize Retrofit
-        val retrofit = Retrofit.Builder()
-            .baseUrl("https://faas-fra1-afec6ce7.doserverless.co/api/v1/web/fn-b547621a-40ef-4dbd-8b08-aa9b8bd6c273/default/")
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-
-        mapApiService = retrofit.create(MapApiService::class.java)
-        
         val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
         addDebugLog("Received shared text: $sharedText")
         
@@ -90,8 +73,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding),
                         sharedText = sharedText,
                         prefs = prefs,
-                        debugLogs = debugLogs,
-                        mapApiService = mapApiService
+                        debugLogs = debugLogs
                     )
                 }
             }
@@ -120,8 +102,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding),
                         sharedText = sharedText,
                         prefs = prefs,
-                        debugLogs = debugLogs,
-                        mapApiService = mapApiService
+                        debugLogs = debugLogs
                     )
                 }
             }
@@ -129,25 +110,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// Mock response data
-private val mockResponse = """
-    {
-        "formatted_address": "8CV6+QRC - Al Ghubaiba - Halwan - Sharjah - United Arab Emirates",
-        "google_maps_url": "https://www.google.com/maps?q=25.344607,55.411712",
-        "latitude": 25.344607,
-        "longitude": 55.411712,
-        "waze_app_url": "waze://?ll=25.344607,55.411712&navigate=yes",
-        "waze_web_url": "https://waze.com/ul?ll=25.344607,55.411712&navigate=yes"
-    }
-""".trimIndent()
-
 @Composable
 fun MainScreen(
     modifier: Modifier = Modifier,
     sharedText: String,
     prefs: SharedPreferences,
-    debugLogs: List<String>,
-    mapApiService: MapApiService
+    debugLogs: List<String>
 ) {
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -208,15 +176,6 @@ fun MainScreen(
         }
     }
 
-    // Ktor client (should be created once per app, not per request)
-    val ktorClient = remember {
-        HttpClient(OkHttp) {
-            install(ContentNegotiation) {
-                json(Json { ignoreUnknownKeys = true })
-            }
-        }
-    }
-
     LaunchedEffect(urlToProcess) {
         if (urlToProcess.isNotEmpty()) {
             addDebugLog("Starting to process URL: $urlToProcess")
@@ -238,10 +197,33 @@ fun MainScreen(
                     } else {
                         val encodedUrl = Uri.encode(urlToProcess)
                         val apiUrl = "https://faas-fra1-afec6ce7.doserverless.co/api/v1/web/fn-b547621a-40ef-4dbd-8b08-aa9b8bd6c273/default/map2waze?url=$encodedUrl"
-                        addDebugLog("Making API call to: $apiUrl (Ktor)")
+                        addDebugLog("Making API call to: $apiUrl (HttpURLConnection)")
                         try {
-                            response = ktorClient.get(apiUrl).body()
-                            addDebugLog("API Response received: $response")
+                            val url = URL(apiUrl)
+                            val connection = url.openConnection() as HttpURLConnection
+                            connection.requestMethod = "GET"
+                            connection.connectTimeout = 15000
+                            connection.readTimeout = 15000
+                            connection.setRequestProperty("Accept", "application/json")
+                            val responseCode = connection.responseCode
+                            if (responseCode == HttpURLConnection.HTTP_OK) {
+                                val body = connection.inputStream.bufferedReader().use { it.readText() }
+                                addDebugLog("API Response: $body")
+                                val json = JSONObject(body)
+                                response = MapResponse(
+                                    formatted_address = json.optString("formatted_address"),
+                                    google_maps_url = json.optString("google_maps_url"),
+                                    latitude = json.optDouble("latitude"),
+                                    longitude = json.optDouble("longitude"),
+                                    waze_app_url = json.optString("waze_app_url"),
+                                    waze_web_url = json.optString("waze_web_url")
+                                )
+                            } else {
+                                val errorBody = connection.errorStream?.bufferedReader()?.use { it.readText() }
+                                addDebugLog("API Error Response: $errorBody")
+                                throw Exception("Server returned error code: $responseCode")
+                            }
+                            connection.disconnect()
                         } catch (e: Exception) {
                             addDebugLog("API call failed: ${e.message}")
                             throw Exception("Failed to convert URL: ${e.message}")
