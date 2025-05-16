@@ -2,9 +2,11 @@ package com.shaghaf.map2waze
 
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -64,6 +66,7 @@ fun MainScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var wazeUrl by remember { mutableStateOf<String?>(null) }
+    var wazeWebUrl by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     
@@ -73,6 +76,26 @@ fun MainScreen(
     
     // Auto-open setting
     var autoOpenWaze by remember { mutableStateOf(prefs.getBoolean("autoOpenWaze", true)) }
+
+    fun openWaze(url: String) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            if (intent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(intent)
+            } else {
+                // If Waze app is not installed, open in browser
+                val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeWebUrl))
+                context.startActivity(webIntent)
+                Toast.makeText(context, "Waze app not found. Opening in browser.", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Exception) {
+            Log.e("Map2Waze", "Error opening Waze", e)
+            // Fallback to browser
+            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeWebUrl))
+            context.startActivity(webIntent)
+            Toast.makeText(context, "Error opening Waze. Opening in browser.", Toast.LENGTH_LONG).show()
+        }
+    }
     
     // Use test URL if in test mode, otherwise use shared text
     val urlToProcess = remember(sharedText, isTestMode, testUrl) {
@@ -127,11 +150,11 @@ fun MainScreen(
                     // Process response (both mock and real)
                     val jsonResponse = JSONObject(response)
                     wazeUrl = jsonResponse.getString("waze_app_url")
+                    wazeWebUrl = jsonResponse.getString("waze_web_url")
                     
                     if (autoOpenWaze) {
                         // Auto-open Waze app if enabled
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeUrl))
-                        context.startActivity(intent)
+                        openWaze(wazeUrl!!)
                     }
                 } catch (e: Exception) {
                     Log.e("Map2Waze", "Error occurred", e)
@@ -227,13 +250,23 @@ fun MainScreen(
                 )
                 
                 if (!autoOpenWaze) {
-                    Button(
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeUrl))
-                            context.startActivity(intent)
-                        }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Open in Waze")
+                        Button(
+                            onClick = { openWaze(wazeUrl!!) }
+                        ) {
+                            Text("Open in Waze App")
+                        }
+                        
+                        Button(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeWebUrl))
+                                context.startActivity(intent)
+                            }
+                        ) {
+                            Text("Open in Browser")
+                        }
                     }
                 }
             }
