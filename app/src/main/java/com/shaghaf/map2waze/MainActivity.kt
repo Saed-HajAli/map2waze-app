@@ -30,6 +30,8 @@ import java.net.HttpURLConnection
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.text.input.TextFieldValue
 
 // Data class for API response
 data class MapResponse(
@@ -150,6 +152,10 @@ fun MainScreen(
     // Auto-open setting
     var autoOpenWaze by remember { mutableStateOf(prefs.getBoolean("autoOpenWaze", true)) }
 
+    // New: Manual URL input
+    var manualUrl by remember { mutableStateOf(TextFieldValue("")) }
+    var useManualUrl by remember { mutableStateOf(false) }
+
     // Log when sharedText changes
     LaunchedEffect(sharedText) {
         addDebugLog("Processing shared text: $sharedText")
@@ -176,10 +182,15 @@ fun MainScreen(
         }
     }
     
-    // Use test URL if in test mode, otherwise use shared text
-    val urlToProcess = remember(sharedText, isTestMode, testUrl) {
-        val url = if (isTestMode) testUrl else sharedText
-        addDebugLog("URL to process: $url (isTestMode: $isTestMode)")
+    // Use test URL if in test mode, otherwise use shared text or manual input
+    val urlToProcess = remember(sharedText, isTestMode, testUrl, manualUrl, useManualUrl) {
+        val url = when {
+            isTestMode -> testUrl
+            useManualUrl && manualUrl.text.isNotBlank() -> manualUrl.text
+            sharedText.isNotBlank() -> sharedText
+            else -> ""
+        }
+        addDebugLog("URL to process: $url (isTestMode: $isTestMode, useManualUrl: $useManualUrl)")
         url
     }
 
@@ -323,6 +334,40 @@ fun MainScreen(
                         checked = showDebugLogs,
                         onCheckedChange = { showDebugLogs = it }
                     )
+                }
+            }
+        }
+
+        // New: Manual URL input section
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("أدخل رابط Google Maps يدويًا أو استخدم المشاركة:", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = manualUrl,
+                    onValueChange = {
+                        manualUrl = it
+                        useManualUrl = it.text.isNotBlank()
+                    },
+                    label = { Text("Google Maps URL") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { useManualUrl = manualUrl.text.isNotBlank() },
+                    enabled = manualUrl.text.isNotBlank() && !isLoading
+                ) {
+                    Text("تنفيذ الاتصال بالرابط")
                 }
             }
         }
