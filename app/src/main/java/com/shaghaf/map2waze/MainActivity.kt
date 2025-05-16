@@ -11,11 +11,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.shaghaf.map2waze.ui.theme.Map2WazeTheme
@@ -23,32 +26,58 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.net.URL
 import java.net.HttpURLConnection
+import java.text.SimpleDateFormat
+import java.util.*
 
 class MainActivity : ComponentActivity() {
     private lateinit var prefs: SharedPreferences
+    private val debugLogs = mutableStateListOf<String>()
+
+    private fun addDebugLog(message: String) {
+        val timestamp = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        val logMessage = "[$timestamp] $message"
+        Log.d("Map2Waze", message)
+        debugLogs.add(logMessage)
+        if (debugLogs.size > 100) { // Keep only last 100 logs
+            debugLogs.removeAt(0)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = getSharedPreferences("Map2WazePrefs", MODE_PRIVATE)
         enableEdgeToEdge()
         
-        // Log the intent action and data
-        Log.d("Map2Waze", "Intent Action: ${intent.action}")
-        Log.d("Map2Waze", "Intent Type: ${intent.type}")
-        Log.d("Map2Waze", "Intent Data: ${intent.data}")
+        // Detailed intent logging
+        addDebugLog("=== onCreate Intent Details ===")
+        addDebugLog("Action: ${intent.action}")
+        addDebugLog("Type: ${intent.type}")
+        addDebugLog("Data: ${intent.data}")
+        addDebugLog("Categories: ${intent.categories}")
+        addDebugLog("Flags: ${intent.flags}")
+        addDebugLog("Package: ${intent.`package`}")
+        addDebugLog("Component: ${intent.component}")
+        addDebugLog("Extras: ${intent.extras?.keySet()?.joinToString { "$it: ${intent.extras?.get(it)}" }}")
         
         // Handle the intent
         val sharedText = when {
             intent.action == Intent.ACTION_SEND && intent.type == "text/plain" -> {
-                intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+                val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+                addDebugLog("Got text from ACTION_SEND: $text")
+                text
             }
             intent.data != null -> {
-                intent.data.toString()
+                val uri = intent.data.toString()
+                addDebugLog("Got URI from intent.data: $uri")
+                uri
             }
-            else -> ""
+            else -> {
+                addDebugLog("No valid intent data found")
+                ""
+            }
         }
         
-        Log.d("Map2Waze", "Shared Text: $sharedText")
+        addDebugLog("Final shared text: $sharedText")
         
         setContent {
             Map2WazeTheme {
@@ -56,7 +85,8 @@ class MainActivity : ComponentActivity() {
                     MainScreen(
                         modifier = Modifier.padding(innerPadding),
                         sharedText = sharedText,
-                        prefs = prefs
+                        prefs = prefs,
+                        debugLogs = debugLogs
                     )
                 }
             }
@@ -67,32 +97,45 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         
-        // Log the new intent
-        Log.d("Map2Waze", "New Intent Action: ${intent?.action}")
-        Log.d("Map2Waze", "New Intent Type: ${intent?.type}")
-        Log.d("Map2Waze", "New Intent Data: ${intent?.data}")
+        // Detailed new intent logging
+        addDebugLog("=== onNewIntent Details ===")
+        addDebugLog("Action: ${intent?.action}")
+        addDebugLog("Type: ${intent?.type}")
+        addDebugLog("Data: ${intent?.data}")
+        addDebugLog("Categories: ${intent?.categories}")
+        addDebugLog("Flags: ${intent?.flags}")
+        addDebugLog("Package: ${intent?.`package`}")
+        addDebugLog("Component: ${intent?.component}")
+        addDebugLog("Extras: ${intent?.extras?.keySet()?.joinToString { "$it: ${intent.extras?.get(it)}" }}")
         
         // Handle the new intent
         val sharedText = when {
             intent?.action == Intent.ACTION_SEND && intent.type == "text/plain" -> {
-                intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+                val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+                addDebugLog("Got text from new ACTION_SEND: $text")
+                text
             }
             intent?.data != null -> {
-                intent.data.toString()
+                val uri = intent.data.toString()
+                addDebugLog("Got URI from new intent.data: $uri")
+                uri
             }
-            else -> ""
+            else -> {
+                addDebugLog("No valid new intent data found")
+                ""
+            }
         }
         
-        Log.d("Map2Waze", "New Shared Text: $sharedText")
+        addDebugLog("Final new shared text: $sharedText")
         
-        // Update the UI with the new shared text
         setContent {
             Map2WazeTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     MainScreen(
                         modifier = Modifier.padding(innerPadding),
                         sharedText = sharedText,
-                        prefs = prefs
+                        prefs = prefs,
+                        debugLogs = debugLogs
                     )
                 }
             }
@@ -116,14 +159,17 @@ private val mockResponse = """
 fun MainScreen(
     modifier: Modifier = Modifier,
     sharedText: String,
-    prefs: SharedPreferences
+    prefs: SharedPreferences,
+    debugLogs: List<String>
 ) {
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var wazeUrl by remember { mutableStateOf<String?>(null) }
     var wazeWebUrl by remember { mutableStateOf<String?>(null) }
+    var showDebugLogs by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val scrollState = rememberScrollState()
     
     // Test mode variables
     var isTestMode by remember { mutableStateOf(prefs.getBoolean("isTestMode", false)) }
@@ -132,20 +178,26 @@ fun MainScreen(
     // Auto-open setting
     var autoOpenWaze by remember { mutableStateOf(prefs.getBoolean("autoOpenWaze", true)) }
 
+    // Log when sharedText changes
+    LaunchedEffect(sharedText) {
+        (context as? MainActivity)?.addDebugLog("MainScreen received sharedText: $sharedText")
+    }
+
     fun openWaze(url: String) {
         try {
+            (context as? MainActivity)?.addDebugLog("Attempting to open Waze with URL: $url")
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
             if (intent.resolveActivity(context.packageManager) != null) {
+                (context as? MainActivity)?.addDebugLog("Waze app found, launching...")
                 context.startActivity(intent)
             } else {
-                // If Waze app is not installed, open in browser
+                (context as? MainActivity)?.addDebugLog("Waze app not found, falling back to browser")
                 val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeWebUrl))
                 context.startActivity(webIntent)
                 Toast.makeText(context, "Waze app not found. Opening in browser.", Toast.LENGTH_LONG).show()
             }
         } catch (e: Exception) {
-            Log.e("Map2Waze", "Error opening Waze", e)
-            // Fallback to browser
+            (context as? MainActivity)?.addDebugLog("Error opening Waze: ${e.message}")
             val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeWebUrl))
             context.startActivity(webIntent)
             Toast.makeText(context, "Error opening Waze. Opening in browser.", Toast.LENGTH_LONG).show()
@@ -154,11 +206,14 @@ fun MainScreen(
     
     // Use test URL if in test mode, otherwise use shared text
     val urlToProcess = remember(sharedText, isTestMode, testUrl) {
-        if (isTestMode) testUrl else sharedText
+        val url = if (isTestMode) testUrl else sharedText
+        (context as? MainActivity)?.addDebugLog("urlToProcess: $url (isTestMode: $isTestMode)")
+        url
     }
 
     // Save settings when they change
     LaunchedEffect(isTestMode, autoOpenWaze) {
+        (context as? MainActivity)?.addDebugLog("Settings changed - isTestMode: $isTestMode, autoOpenWaze: $autoOpenWaze")
         prefs.edit().apply {
             putBoolean("isTestMode", isTestMode)
             putBoolean("autoOpenWaze", autoOpenWaze)
@@ -168,21 +223,20 @@ fun MainScreen(
 
     LaunchedEffect(urlToProcess) {
         if (urlToProcess.isNotEmpty()) {
+            (context as? MainActivity)?.addDebugLog("Starting to process URL: $urlToProcess")
             isLoading = true
             errorMessage = null
             scope.launch {
                 try {
                     val response: String
                     if (isTestMode) {
-                        // Use mock response in test mode
-                        Log.d("Map2Waze", "Using mock response in test mode")
+                        (context as? MainActivity)?.addDebugLog("Using mock response in test mode")
                         response = mockResponse
                     } else {
-                        // Make real API call
                         val encodedUrl = Uri.encode(urlToProcess)
                         val apiUrl = "https://faas-fra1-afec6ce7.doserverless.co/api/v1/web/fn-b547621a-40ef-4dbd-8b08-aa9b8bd6c273/default/map2waze?url=$encodedUrl"
                         
-                        Log.d("Map2Waze", "Making real API call to: $apiUrl")
+                        (context as? MainActivity)?.addDebugLog("Making API call to: $apiUrl")
                         
                         val connection = URL(apiUrl).openConnection() as HttpURLConnection
                         connection.requestMethod = "GET"
@@ -190,41 +244,45 @@ fun MainScreen(
                         connection.readTimeout = 15000
                         
                         val responseCode = connection.responseCode
-                        Log.d("Map2Waze", "Response Code: $responseCode")
+                        (context as? MainActivity)?.addDebugLog("API Response Code: $responseCode")
                         
                         if (responseCode == HttpURLConnection.HTTP_OK) {
                             response = connection.inputStream.bufferedReader().use { it.readText() }
-                            Log.d("Map2Waze", "Response: $response")
+                            (context as? MainActivity)?.addDebugLog("API Response: $response")
                         } else {
                             val errorResponse = connection.errorStream?.bufferedReader()?.use { it.readText() }
-                            Log.e("Map2Waze", "Error Response: $errorResponse")
+                            (context as? MainActivity)?.addDebugLog("API Error Response: $errorResponse")
                             throw Exception("Server returned error code: $responseCode")
                         }
                     }
 
-                    // Process response (both mock and real)
                     val jsonResponse = JSONObject(response)
                     wazeUrl = jsonResponse.getString("waze_app_url")
                     wazeWebUrl = jsonResponse.getString("waze_web_url")
                     
+                    (context as? MainActivity)?.addDebugLog("Parsed Waze URLs - App: $wazeUrl, Web: $wazeWebUrl")
+                    
                     if (autoOpenWaze) {
-                        // Auto-open Waze app if enabled
+                        (context as? MainActivity)?.addDebugLog("Auto-opening Waze app")
                         openWaze(wazeUrl!!)
                     }
                 } catch (e: Exception) {
-                    Log.e("Map2Waze", "Error occurred", e)
+                    (context as? MainActivity)?.addDebugLog("Error processing URL: ${e.message}")
                     errorMessage = "Error: ${e.message}\nPlease try again later."
                 } finally {
                     isLoading = false
                 }
             }
+        } else {
+            (context as? MainActivity)?.addDebugLog("No URL to process")
         }
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(scrollState),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -273,6 +331,21 @@ fun MainScreen(
                     Switch(
                         checked = autoOpenWaze,
                         onCheckedChange = { autoOpenWaze = it }
+                    )
+                }
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Show Debug Logs",
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = showDebugLogs,
+                        onCheckedChange = { showDebugLogs = it }
                     )
                 }
             }
@@ -330,6 +403,36 @@ fun MainScreen(
                 text = "Share a Google Maps link to convert it to Waze",
                 textAlign = TextAlign.Center
             )
+        }
+        
+        // Debug Logs Section
+        if (showDebugLogs) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = "Debug Logs",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    
+                    debugLogs.forEach { log ->
+                        Text(
+                            text = log,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
