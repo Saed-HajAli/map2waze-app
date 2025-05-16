@@ -200,29 +200,60 @@ fun MainScreen(
                         addDebugLog("Making API call to: $apiUrl")
                         
                         try {
+                            addDebugLog("Creating URL connection...")
                             val connection = URL(apiUrl).openConnection() as HttpURLConnection
                             connection.requestMethod = "GET"
                             connection.connectTimeout = 15000
                             connection.readTimeout = 15000
+                            connection.setRequestProperty("Accept", "application/json")
+                            
+                            addDebugLog("Connecting to API...")
+                            try {
+                                connection.connect()
+                                addDebugLog("Connection successful")
+                            } catch (e: Exception) {
+                                addDebugLog("Connection failed: ${e.message}")
+                                throw Exception("Failed to connect to API: ${e.message}")
+                            }
                             
                             val responseCode = connection.responseCode
                             addDebugLog("API Response Code: $responseCode")
                             
                             if (responseCode == HttpURLConnection.HTTP_OK) {
-                                response = connection.inputStream.bufferedReader().use { it.readText() }
-                                addDebugLog("API Response: $response")
-                                
-                                if (response.isBlank()) {
-                                    throw Exception("Empty response from API")
+                                addDebugLog("Reading response...")
+                                try {
+                                    response = connection.inputStream.bufferedReader().use { it.readText() }
+                                    addDebugLog("API Response: $response")
+                                    
+                                    if (response.isBlank()) {
+                                        throw Exception("Empty response from API")
+                                    }
+                                } catch (e: Exception) {
+                                    addDebugLog("Error reading response: ${e.message}")
+                                    throw Exception("Error reading API response: ${e.message}")
                                 }
                             } else {
-                                val errorResponse = connection.errorStream?.bufferedReader()?.use { it.readText() }
+                                addDebugLog("Reading error response...")
+                                val errorResponse = try {
+                                    connection.errorStream?.bufferedReader()?.use { it.readText() }
+                                } catch (e: Exception) {
+                                    addDebugLog("Error reading error response: ${e.message}")
+                                    null
+                                }
                                 addDebugLog("API Error Response: $errorResponse")
                                 throw Exception("Server returned error code: $responseCode${if (errorResponse != null) " - $errorResponse" else ""}")
                             }
                         } catch (e: Exception) {
-                            addDebugLog("Network error: ${e.message}")
+                            addDebugLog("Network error details: ${e.javaClass.simpleName} - ${e.message}")
+                            e.printStackTrace()
                             throw Exception("Network error: ${e.message}")
+                        } finally {
+                            try {
+                                connection.disconnect()
+                                addDebugLog("Connection closed")
+                            } catch (e: Exception) {
+                                addDebugLog("Error closing connection: ${e.message}")
+                            }
                         }
                     }
 
