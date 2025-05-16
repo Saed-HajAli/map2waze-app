@@ -56,36 +56,9 @@ class MainActivity : ComponentActivity() {
         prefs = getSharedPreferences("Map2WazePrefs", MODE_PRIVATE)
         enableEdgeToEdge()
         
-        // Detailed intent logging
-        addDebugLog("=== onCreate Intent Details ===")
-        addDebugLog("Action: ${intent.action}")
-        addDebugLog("Type: ${intent.type}")
-        addDebugLog("Data: ${intent.data}")
-        addDebugLog("Categories: ${intent.categories}")
-        addDebugLog("Flags: ${intent.flags}")
-        addDebugLog("Package: ${intent.`package`}")
-        addDebugLog("Component: ${intent.component}")
-        addDebugLog("Extras: ${intent.extras?.keySet()?.joinToString { "$it: ${intent.extras?.get(it)}" }}")
-        
-        // Handle the intent
-        val sharedText = when {
-            intent.action == Intent.ACTION_SEND && intent.type == "text/plain" -> {
-                val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
-                addDebugLog("Got text from ACTION_SEND: $text")
-                text
-            }
-            intent.data != null -> {
-                val uri = intent.data.toString()
-                addDebugLog("Got URI from intent.data: $uri")
-                uri
-            }
-            else -> {
-                addDebugLog("No valid intent data found")
-                ""
-            }
-        }
-        
-        addDebugLog("Final shared text: $sharedText")
+        // Get shared text directly from EXTRA_TEXT
+        val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+        addDebugLog("Received shared text: $sharedText")
         
         setContent {
             Map2WazeTheme {
@@ -112,36 +85,9 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         
-        // Detailed new intent logging
-        addDebugLog("=== onNewIntent Details ===")
-        addDebugLog("Action: ${intent?.action}")
-        addDebugLog("Type: ${intent?.type}")
-        addDebugLog("Data: ${intent?.data}")
-        addDebugLog("Categories: ${intent?.categories}")
-        addDebugLog("Flags: ${intent?.flags}")
-        addDebugLog("Package: ${intent?.`package`}")
-        addDebugLog("Component: ${intent?.component}")
-        addDebugLog("Extras: ${intent?.extras?.keySet()?.joinToString { "$it: ${intent.extras?.get(it)}" }}")
-        
-        // Handle the new intent
-        val sharedText = when {
-            intent?.action == Intent.ACTION_SEND && intent.type == "text/plain" -> {
-                val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
-                addDebugLog("Got text from new ACTION_SEND: $text")
-                text
-            }
-            intent?.data != null -> {
-                val uri = intent.data.toString()
-                addDebugLog("Got URI from new intent.data: $uri")
-                uri
-            }
-            else -> {
-                addDebugLog("No valid new intent data found")
-                ""
-            }
-        }
-        
-        addDebugLog("Final new shared text: $sharedText")
+        // Get shared text from new intent
+        val sharedText = intent?.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+        addDebugLog("Received new shared text: $sharedText")
         
         setContent {
             Map2WazeTheme {
@@ -195,7 +141,7 @@ fun MainScreen(
 
     // Log when sharedText changes
     LaunchedEffect(sharedText) {
-        addDebugLog("MainScreen received sharedText: $sharedText")
+        addDebugLog("Processing shared text: $sharedText")
     }
 
     fun openWaze(url: String) {
@@ -222,7 +168,7 @@ fun MainScreen(
     // Use test URL if in test mode, otherwise use shared text
     val urlToProcess = remember(sharedText, isTestMode, testUrl) {
         val url = if (isTestMode) testUrl else sharedText
-        addDebugLog("urlToProcess: $url (isTestMode: $isTestMode)")
+        addDebugLog("URL to process: $url (isTestMode: $isTestMode)")
         url
     }
 
