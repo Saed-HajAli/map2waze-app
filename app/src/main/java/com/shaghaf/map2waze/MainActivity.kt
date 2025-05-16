@@ -44,6 +44,7 @@ class MainActivity : ComponentActivity() {
 }
 
 // Mock response data
+
 private val mockResponse = """
     {
         "formatted_address": "8CV6+QRC - Al Ghubaiba - Halwan - Sharjah - United Arab Emirates",
