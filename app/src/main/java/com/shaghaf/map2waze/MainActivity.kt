@@ -148,42 +148,55 @@ fun MainScreen(
             .fillMaxSize()
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Settings section
-        Column(
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(bottom = 16.dp)
         ) {
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Test Mode:",
-                    modifier = Modifier.padding(end = 8.dp)
+                    text = "Settings",
+                    style = MaterialTheme.typography.titleMedium
                 )
-                Switch(
-                    checked = isTestMode,
-                    onCheckedChange = { isTestMode = it }
-                )
-            }
-            
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Auto-open Waze:",
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                Switch(
-                    checked = autoOpenWaze,
-                    onCheckedChange = { autoOpenWaze = it }
-                )
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Test Mode",
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = isTestMode,
+                        onCheckedChange = { isTestMode = it }
+                    )
+                }
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Auto-open Waze",
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = autoOpenWaze,
+                        onCheckedChange = { autoOpenWaze = it }
+                    )
+                }
             }
         }
 
