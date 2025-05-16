@@ -24,15 +24,18 @@ import androidx.compose.ui.unit.dp
 import com.shaghaf.map2waze.MainActivity.Companion.addDebugLog
 import com.shaghaf.map2waze.ui.theme.Map2WazeTheme
 import kotlinx.coroutines.launch
-import org.json.JSONObject
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
-import retrofit2.http.GET
-import retrofit2.http.Query
-import java.text.SimpleDateFormat
-import java.util.*
+import io.ktor.client.*
+import io.ktor.client.engine.okhttp.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
+@Serializable
 // API Response data class
+// (now using kotlinx.serialization)
 data class MapResponse(
     val formatted_address: String,
     val google_maps_url: String,
@@ -41,12 +44,6 @@ data class MapResponse(
     val waze_app_url: String,
     val waze_web_url: String
 )
-
-// Retrofit API Interface
-interface MapApiService {
-    @GET("map2waze")
-    suspend fun convertMapUrl(@Query("url") url: String): MapResponse
-}
 
 class MainActivity : ComponentActivity() {
     private lateinit var prefs: SharedPreferences
@@ -211,6 +208,15 @@ fun MainScreen(
         }
     }
 
+    // Ktor client (should be created once per app, not per request)
+    val ktorClient = remember {
+        HttpClient(OkHttp) {
+            install(ContentNegotiation) {
+                json(Json { ignoreUnknownKeys = true })
+            }
+        }
+    }
+
     LaunchedEffect(urlToProcess) {
         if (urlToProcess.isNotEmpty()) {
             addDebugLog("Starting to process URL: $urlToProcess")
@@ -230,9 +236,11 @@ fun MainScreen(
                             waze_web_url = "https://waze.com/ul?ll=25.344607,55.411712&navigate=yes"
                         )
                     } else {
-                        addDebugLog("Making API call to convert URL: $urlToProcess")
+                        val encodedUrl = Uri.encode(urlToProcess)
+                        val apiUrl = "https://faas-fra1-afec6ce7.doserverless.co/api/v1/web/fn-b547621a-40ef-4dbd-8b08-aa9b8bd6c273/default/map2waze?url=$encodedUrl"
+                        addDebugLog("Making API call to: $apiUrl (Ktor)")
                         try {
-                            response = mapApiService.convertMapUrl(urlToProcess)
+                            response = ktorClient.get(apiUrl).body()
                             addDebugLog("API Response received: $response")
                         } catch (e: Exception) {
                             addDebugLog("API call failed: ${e.message}")
