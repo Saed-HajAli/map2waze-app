@@ -30,6 +30,16 @@ import java.net.HttpURLConnection
 import java.text.SimpleDateFormat
 import java.util.*
 
+// Data class for API response
+data class MapResponse(
+    val formatted_address: String,
+    val google_maps_url: String,
+    val latitude: Double,
+    val longitude: Double,
+    val waze_app_url: String,
+    val waze_web_url: String
+)
+
 class MainActivity : ComponentActivity() {
     private lateinit var prefs: SharedPreferences
     private val debugLogs = mutableStateListOf<String>()
