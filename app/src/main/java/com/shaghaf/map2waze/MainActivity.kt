@@ -33,18 +33,25 @@ class MainActivity : ComponentActivity() {
     private lateinit var prefs: SharedPreferences
     private val debugLogs = mutableStateListOf<String>()
 
-    private fun addDebugLog(message: String) {
-        val timestamp = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-        val logMessage = "[$timestamp] $message"
-        Log.d("Map2Waze", message)
-        debugLogs.add(logMessage)
-        if (debugLogs.size > 100) { // Keep only last 100 logs
-            debugLogs.removeAt(0)
+    companion object {
+        private var instance: MainActivity? = null
+        
+        fun addDebugLog(message: String) {
+            instance?.let { activity ->
+                val timestamp = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+                val logMessage = "[$timestamp] $message"
+                Log.d("Map2Waze", message)
+                activity.debugLogs.add(logMessage)
+                if (activity.debugLogs.size > 100) { // Keep only last 100 logs
+                    activity.debugLogs.removeAt(0)
+                }
+            }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        instance = this
         prefs = getSharedPreferences("Map2WazePrefs", MODE_PRIVATE)
         enableEdgeToEdge()
         
@@ -93,6 +100,13 @@ class MainActivity : ComponentActivity() {
         }
     }
     
+    override fun onDestroy() {
+        super.onDestroy()
+        if (instance == this) {
+            instance = null
+        }
+    }
+
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -180,24 +194,24 @@ fun MainScreen(
 
     // Log when sharedText changes
     LaunchedEffect(sharedText) {
-        (context as? MainActivity)?.addDebugLog("MainScreen received sharedText: $sharedText")
+        addDebugLog("MainScreen received sharedText: $sharedText")
     }
 
     fun openWaze(url: String) {
         try {
-            (context as? MainActivity)?.addDebugLog("Attempting to open Waze with URL: $url")
+            addDebugLog("Attempting to open Waze with URL: $url")
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
             if (intent.resolveActivity(context.packageManager) != null) {
-                (context as? MainActivity)?.addDebugLog("Waze app found, launching...")
+                addDebugLog("Waze app found, launching...")
                 context.startActivity(intent)
             } else {
-                (context as? MainActivity)?.addDebugLog("Waze app not found, falling back to browser")
+                addDebugLog("Waze app not found, falling back to browser")
                 val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeWebUrl))
                 context.startActivity(webIntent)
                 Toast.makeText(context, "Waze app not found. Opening in browser.", Toast.LENGTH_LONG).show()
             }
         } catch (e: Exception) {
-            (context as? MainActivity)?.addDebugLog("Error opening Waze: ${e.message}")
+            addDebugLog("Error opening Waze: ${e.message}")
             val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeWebUrl))
             context.startActivity(webIntent)
             Toast.makeText(context, "Error opening Waze. Opening in browser.", Toast.LENGTH_LONG).show()
@@ -207,13 +221,13 @@ fun MainScreen(
     // Use test URL if in test mode, otherwise use shared text
     val urlToProcess = remember(sharedText, isTestMode, testUrl) {
         val url = if (isTestMode) testUrl else sharedText
-        (context as? MainActivity)?.addDebugLog("urlToProcess: $url (isTestMode: $isTestMode)")
+        addDebugLog("urlToProcess: $url (isTestMode: $isTestMode)")
         url
     }
 
     // Save settings when they change
     LaunchedEffect(isTestMode, autoOpenWaze) {
-        (context as? MainActivity)?.addDebugLog("Settings changed - isTestMode: $isTestMode, autoOpenWaze: $autoOpenWaze")
+        addDebugLog("Settings changed - isTestMode: $isTestMode, autoOpenWaze: $autoOpenWaze")
         prefs.edit().apply {
             putBoolean("isTestMode", isTestMode)
             putBoolean("autoOpenWaze", autoOpenWaze)
@@ -223,20 +237,20 @@ fun MainScreen(
 
     LaunchedEffect(urlToProcess) {
         if (urlToProcess.isNotEmpty()) {
-            (context as? MainActivity)?.addDebugLog("Starting to process URL: $urlToProcess")
+            addDebugLog("Starting to process URL: $urlToProcess")
             isLoading = true
             errorMessage = null
             scope.launch {
                 try {
                     val response: String
                     if (isTestMode) {
-                        (context as? MainActivity)?.addDebugLog("Using mock response in test mode")
+                        addDebugLog("Using mock response in test mode")
                         response = mockResponse
                     } else {
                         val encodedUrl = Uri.encode(urlToProcess)
                         val apiUrl = "https://faas-fra1-afec6ce7.doserverless.co/api/v1/web/fn-b547621a-40ef-4dbd-8b08-aa9b8bd6c273/default/map2waze?url=$encodedUrl"
                         
-                        (context as? MainActivity)?.addDebugLog("Making API call to: $apiUrl")
+                        addDebugLog("Making API call to: $apiUrl")
                         
                         val connection = URL(apiUrl).openConnection() as HttpURLConnection
                         connection.requestMethod = "GET"
@@ -244,14 +258,14 @@ fun MainScreen(
                         connection.readTimeout = 15000
                         
                         val responseCode = connection.responseCode
-                        (context as? MainActivity)?.addDebugLog("API Response Code: $responseCode")
+                        addDebugLog("API Response Code: $responseCode")
                         
                         if (responseCode == HttpURLConnection.HTTP_OK) {
                             response = connection.inputStream.bufferedReader().use { it.readText() }
-                            (context as? MainActivity)?.addDebugLog("API Response: $response")
+                            addDebugLog("API Response: $response")
                         } else {
                             val errorResponse = connection.errorStream?.bufferedReader()?.use { it.readText() }
-                            (context as? MainActivity)?.addDebugLog("API Error Response: $errorResponse")
+                            addDebugLog("API Error Response: $errorResponse")
                             throw Exception("Server returned error code: $responseCode")
                         }
                     }
@@ -260,21 +274,21 @@ fun MainScreen(
                     wazeUrl = jsonResponse.getString("waze_app_url")
                     wazeWebUrl = jsonResponse.getString("waze_web_url")
                     
-                    (context as? MainActivity)?.addDebugLog("Parsed Waze URLs - App: $wazeUrl, Web: $wazeWebUrl")
+                    addDebugLog("Parsed Waze URLs - App: $wazeUrl, Web: $wazeWebUrl")
                     
                     if (autoOpenWaze) {
-                        (context as? MainActivity)?.addDebugLog("Auto-opening Waze app")
+                        addDebugLog("Auto-opening Waze app")
                         openWaze(wazeUrl!!)
                     }
                 } catch (e: Exception) {
-                    (context as? MainActivity)?.addDebugLog("Error processing URL: ${e.message}")
+                    addDebugLog("Error processing URL: ${e.message}")
                     errorMessage = "Error: ${e.message}\nPlease try again later."
                 } finally {
                     isLoading = false
                 }
             }
         } else {
-            (context as? MainActivity)?.addDebugLog("No URL to process")
+            addDebugLog("No URL to process")
         }
     }
 
