@@ -31,12 +31,67 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         prefs = getSharedPreferences("Map2WazePrefs", MODE_PRIVATE)
         enableEdgeToEdge()
+        
+        // Log the intent action and data
+        Log.d("Map2Waze", "Intent Action: ${intent.action}")
+        Log.d("Map2Waze", "Intent Type: ${intent.type}")
+        Log.d("Map2Waze", "Intent Data: ${intent.data}")
+        
+        // Handle the intent
+        val sharedText = when {
+            intent.action == Intent.ACTION_SEND && intent.type == "text/plain" -> {
+                intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+            }
+            intent.data != null -> {
+                intent.data.toString()
+            }
+            else -> ""
+        }
+        
+        Log.d("Map2Waze", "Shared Text: $sharedText")
+        
         setContent {
             Map2WazeTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     MainScreen(
                         modifier = Modifier.padding(innerPadding),
-                        sharedText = intent.getStringExtra(Intent.EXTRA_TEXT) ?: "",
+                        sharedText = sharedText,
+                        prefs = prefs
+                    )
+                }
+            }
+        }
+    }
+    
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        
+        // Log the new intent
+        Log.d("Map2Waze", "New Intent Action: ${intent?.action}")
+        Log.d("Map2Waze", "New Intent Type: ${intent?.type}")
+        Log.d("Map2Waze", "New Intent Data: ${intent?.data}")
+        
+        // Handle the new intent
+        val sharedText = when {
+            intent?.action == Intent.ACTION_SEND && intent.type == "text/plain" -> {
+                intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+            }
+            intent?.data != null -> {
+                intent.data.toString()
+            }
+            else -> ""
+        }
+        
+        Log.d("Map2Waze", "New Shared Text: $sharedText")
+        
+        // Update the UI with the new shared text
+        setContent {
+            Map2WazeTheme {
+                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    MainScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        sharedText = sharedText,
                         prefs = prefs
                     )
                 }
