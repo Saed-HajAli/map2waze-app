@@ -199,33 +199,56 @@ fun MainScreen(
                         
                         addDebugLog("Making API call to: $apiUrl")
                         
-                        val connection = URL(apiUrl).openConnection() as HttpURLConnection
-                        connection.requestMethod = "GET"
-                        connection.connectTimeout = 15000
-                        connection.readTimeout = 15000
-                        
-                        val responseCode = connection.responseCode
-                        addDebugLog("API Response Code: $responseCode")
-                        
-                        if (responseCode == HttpURLConnection.HTTP_OK) {
-                            response = connection.inputStream.bufferedReader().use { it.readText() }
-                            addDebugLog("API Response: $response")
-                        } else {
-                            val errorResponse = connection.errorStream?.bufferedReader()?.use { it.readText() }
-                            addDebugLog("API Error Response: $errorResponse")
-                            throw Exception("Server returned error code: $responseCode")
+                        try {
+                            val connection = URL(apiUrl).openConnection() as HttpURLConnection
+                            connection.requestMethod = "GET"
+                            connection.connectTimeout = 15000
+                            connection.readTimeout = 15000
+                            
+                            val responseCode = connection.responseCode
+                            addDebugLog("API Response Code: $responseCode")
+                            
+                            if (responseCode == HttpURLConnection.HTTP_OK) {
+                                response = connection.inputStream.bufferedReader().use { it.readText() }
+                                addDebugLog("API Response: $response")
+                                
+                                if (response.isBlank()) {
+                                    throw Exception("Empty response from API")
+                                }
+                            } else {
+                                val errorResponse = connection.errorStream?.bufferedReader()?.use { it.readText() }
+                                addDebugLog("API Error Response: $errorResponse")
+                                throw Exception("Server returned error code: $responseCode${if (errorResponse != null) " - $errorResponse" else ""}")
+                            }
+                        } catch (e: Exception) {
+                            addDebugLog("Network error: ${e.message}")
+                            throw Exception("Network error: ${e.message}")
                         }
                     }
 
-                    val jsonResponse = JSONObject(response)
-                    wazeUrl = jsonResponse.getString("waze_app_url")
-                    wazeWebUrl = jsonResponse.getString("waze_web_url")
-                    
-                    addDebugLog("Parsed Waze URLs - App: $wazeUrl, Web: $wazeWebUrl")
-                    
-                    if (autoOpenWaze) {
-                        addDebugLog("Auto-opening Waze app")
-                        openWaze(wazeUrl!!)
+                    try {
+                        val jsonResponse = JSONObject(response)
+                        if (!jsonResponse.has("waze_app_url") || !jsonResponse.has("waze_web_url")) {
+                            addDebugLog("Invalid API response format: $response")
+                            throw Exception("Invalid response format from API")
+                        }
+                        
+                        wazeUrl = jsonResponse.getString("waze_app_url")
+                        wazeWebUrl = jsonResponse.getString("waze_web_url")
+                        
+                        addDebugLog("Parsed Waze URLs - App: $wazeUrl, Web: $wazeWebUrl")
+                        
+                        if (wazeUrl.isNullOrBlank() || wazeWebUrl.isNullOrBlank()) {
+                            throw Exception("Invalid Waze URLs in response")
+                        }
+                        
+                        if (autoOpenWaze) {
+                            addDebugLog("Auto-opening Waze app")
+                            openWaze(wazeUrl!!)
+                        }
+                    } catch (e: Exception) {
+                        addDebugLog("Error parsing API response: ${e.message}")
+                        throw Exception("Error parsing API response: ${e.message}")
                     }
                 } catch (e: Exception) {
                     addDebugLog("Error processing URL: ${e.message}")
