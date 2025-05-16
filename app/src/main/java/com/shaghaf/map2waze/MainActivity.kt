@@ -62,6 +62,9 @@ fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
     val isTestMode = remember { true }
     val testUrl = remember { "https://maps.app.goo.gl/fZFbPgdBDYpkcwVSA" }
     
+    // Auto-open setting
+    var autoOpenWaze by remember { mutableStateOf(true) }
+    
     // Use test URL if in test mode, otherwise use shared text
     val urlToProcess = remember(sharedText, isTestMode, testUrl) {
         if (isTestMode) testUrl else sharedText
@@ -107,11 +110,8 @@ fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
                     val jsonResponse = JSONObject(response)
                     wazeUrl = jsonResponse.getString("waze_app_url")
                     
-                    if (isTestMode) {
-                        // In test mode, just show the Waze URL
-                        isLoading = false
-                    } else {
-                        // In normal mode, open Waze app
+                    if (autoOpenWaze) {
+                        // Auto-open Waze app if enabled
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeUrl))
                         context.startActivity(intent)
                     }
@@ -132,6 +132,24 @@ fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        // Settings section
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Auto-open Waze:",
+                modifier = Modifier.padding(end = 8.dp)
+            )
+            Switch(
+                checked = autoOpenWaze,
+                onCheckedChange = { autoOpenWaze = it }
+            )
+        }
+
         if (isLoading) {
             CircularProgressIndicator()
         } else if (errorMessage != null) {
@@ -140,20 +158,34 @@ fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
                 color = MaterialTheme.colorScheme.error,
                 textAlign = TextAlign.Center
             )
-        } else if (isTestMode && wazeUrl != null) {
+        } else if (wazeUrl != null) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "Test Mode Active",
-                    style = MaterialTheme.typography.titleMedium,
-                    textAlign = TextAlign.Center
-                )
+                if (isTestMode) {
+                    Text(
+                        text = "Test Mode Active",
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                
                 Text(
                     text = "Waze URL: $wazeUrl",
                     textAlign = TextAlign.Center
                 )
+                
+                if (!autoOpenWaze) {
+                    Button(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeUrl))
+                            context.startActivity(intent)
+                        }
+                    ) {
+                        Text("Open in Waze")
+                    }
+                }
             }
         } else if (urlToProcess.isEmpty()) {
             Text(
