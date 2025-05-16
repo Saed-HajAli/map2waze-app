@@ -38,6 +38,18 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// Mock response data
+private val mockResponse = """
+    {
+        "formatted_address": "8CV6+QRC - Al Ghubaiba - Halwan - Sharjah - United Arab Emirates",
+        "google_maps_url": "https://www.google.com/maps?q=25.344607,55.411712",
+        "latitude": 25.344607,
+        "longitude": 55.411712,
+        "waze_app_url": "waze://?ll=25.344607,55.411712&navigate=yes",
+        "waze_web_url": "https://waze.com/ul?ll=25.344607,55.411712&navigate=yes"
+    }
+""".trimIndent()
+
 @Composable
 fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
     var isLoading by remember { mutableStateOf(false) }
@@ -48,7 +60,7 @@ fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
     
     // Test mode variables
     val isTestMode = remember { true }
-    val testUrl = remember { "https://maps.app.goo.gl/he2tcSbZv1V8otFc9" }
+    val testUrl = remember { "https://maps.app.goo.gl/fZFbPgdBDYpkcwVSA" }
     
     // Use test URL if in test mode, otherwise use shared text
     val urlToProcess = remember(sharedText, isTestMode, testUrl) {
@@ -61,38 +73,47 @@ fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
             errorMessage = null
             scope.launch {
                 try {
-                    val encodedUrl = Uri.encode(urlToProcess)
-                    val apiUrl = "https://faas-fra1-afec6ce7.doserverless.co/api/v1/web/fn-b547621a-40ef-4dbd-8b08-aa9b8bd6c273/default/map2waze?url=$encodedUrl"
-                    
-                    Log.d("Map2Waze", "Processing URL: $apiUrl")
-                    
-                    val connection = URL(apiUrl).openConnection() as HttpURLConnection
-                    connection.requestMethod = "GET"
-                    connection.connectTimeout = 15000
-                    connection.readTimeout = 15000
-                    
-                    val responseCode = connection.responseCode
-                    Log.d("Map2Waze", "Response Code: $responseCode")
-                    
-                    if (responseCode == HttpURLConnection.HTTP_OK) {
-                        val response = connection.inputStream.bufferedReader().use { it.readText() }
-                        Log.d("Map2Waze", "Response: $response")
-                        
-                        val jsonResponse = JSONObject(response)
-                        wazeUrl = jsonResponse.getString("waze_app_url")
-                        
-                        if (isTestMode) {
-                            // In test mode, just show the Waze URL
-                            isLoading = false
-                        } else {
-                            // In normal mode, open Waze app
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeUrl))
-                            context.startActivity(intent)
-                        }
+                    val response: String
+                    if (isTestMode) {
+                        // Use mock response in test mode
+                        Log.d("Map2Waze", "Using mock response in test mode")
+                        response = mockResponse
                     } else {
-                        val errorResponse = connection.errorStream?.bufferedReader()?.use { it.readText() }
-                        Log.e("Map2Waze", "Error Response: $errorResponse")
-                        throw Exception("Server returned error code: $responseCode")
+                        // Make real API call
+                        val encodedUrl = Uri.encode(urlToProcess)
+                        val apiUrl = "https://faas-fra1-afec6ce7.doserverless.co/api/v1/web/fn-b547621a-40ef-4dbd-8b08-aa9b8bd6c273/default/map2waze?url=$encodedUrl"
+                        
+                        Log.d("Map2Waze", "Making real API call to: $apiUrl")
+                        
+                        val connection = URL(apiUrl).openConnection() as HttpURLConnection
+                        connection.requestMethod = "GET"
+                        connection.connectTimeout = 15000
+                        connection.readTimeout = 15000
+                        
+                        val responseCode = connection.responseCode
+                        Log.d("Map2Waze", "Response Code: $responseCode")
+                        
+                        if (responseCode == HttpURLConnection.HTTP_OK) {
+                            response = connection.inputStream.bufferedReader().use { it.readText() }
+                            Log.d("Map2Waze", "Response: $response")
+                        } else {
+                            val errorResponse = connection.errorStream?.bufferedReader()?.use { it.readText() }
+                            Log.e("Map2Waze", "Error Response: $errorResponse")
+                            throw Exception("Server returned error code: $responseCode")
+                        }
+                    }
+
+                    // Process response (both mock and real)
+                    val jsonResponse = JSONObject(response)
+                    wazeUrl = jsonResponse.getString("waze_app_url")
+                    
+                    if (isTestMode) {
+                        // In test mode, just show the Waze URL
+                        isLoading = false
+                    } else {
+                        // In normal mode, open Waze app
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(wazeUrl))
+                        context.startActivity(intent)
                     }
                 } catch (e: Exception) {
                     Log.e("Map2Waze", "Error occurred", e)
@@ -120,10 +141,20 @@ fun MainScreen(modifier: Modifier = Modifier, sharedText: String) {
                 textAlign = TextAlign.Center
             )
         } else if (isTestMode && wazeUrl != null) {
-            Text(
-                text = "Waze URL: $wazeUrl",
-                textAlign = TextAlign.Center
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Test Mode Active",
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Waze URL: $wazeUrl",
+                    textAlign = TextAlign.Center
+                )
+            }
         } else if (urlToProcess.isEmpty()) {
             Text(
                 text = "Share a Google Maps link to convert it to Waze",
